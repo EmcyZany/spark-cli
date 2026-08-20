@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 
 
@@ -17,8 +18,22 @@ WINDOWS_RESERVED_NAMES = {
 WINDOWS_UNSAFE_NAME_PATTERN = re.compile(r'[<>:"\\|?*]')
 
 
+def os_family(platform: str | None = None) -> str:
+    value = platform or sys.platform
+    if value == "darwin":
+        return "macos"
+    if value.startswith("win"):
+        return "windows"
+    if value.startswith("linux"):
+        return "linux"
+    return "unknown"
+
+
 def spark_home() -> Path:
-    return Path(os.environ.get("SPARK_HOME", Path.home() / ".spark")).expanduser()
+    configured = os.environ.get("SPARK_HOME")
+    if not configured:
+        return (Path.home() / ".spark").expanduser()
+    return Path(configured).expanduser()
 
 
 def sandbox_config_dir(home: Path | None = None) -> Path:
@@ -52,10 +67,11 @@ def is_windows_reserved_name(name: str) -> bool:
 
 
 def resolve_safe_output_path(path: str | Path, *, root: Path) -> Path:
-    root_resolved = root.expanduser().resolve()
+    root_path = root.expanduser().absolute()
+    root_resolved = root_path.resolve()
     candidate = Path(path).expanduser()
     if not candidate.is_absolute():
-        candidate = root_resolved / candidate
+        candidate = root_path / candidate
     resolved = candidate.resolve()
     if resolved != root_resolved and root_resolved not in resolved.parents:
         raise ValueError(f"Path must stay inside {root_resolved}.")
@@ -64,4 +80,4 @@ def resolve_safe_output_path(path: str | Path, *, root: Path) -> Path:
         raise ValueError("Path must not use a Windows reserved device name.")
     if any(WINDOWS_UNSAFE_NAME_PATTERN.search(part) for part in relative.parts):
         raise ValueError("Path must not use Windows-unsafe characters.")
-    return resolved
+    return candidate
